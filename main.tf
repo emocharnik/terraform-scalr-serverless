@@ -18,12 +18,17 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+# Fetch official Scalr.io IP addresses (independent module)
+module "scalr_ips" {
+  source = "./modules/common/scalr-ips"
+}
+
 module "api_gateway" {
   source = "./modules/aws/api-gateway"
 
   name                   = var.api_gateway_name
   environment            = var.api_gateway_environment
-  additional_allowed_ips = module.agent_pool.allowed_ips
+  additional_allowed_ips = module.scalr_ips.allowed_ips
   allow_all_ingress      = var.allow_all_ingress
   lambda_invoke_arn      = module.lambda.invoke_arn
   lambda_function_name   = module.lambda.function_name
@@ -64,6 +69,20 @@ module "lambda" {
 
 module "agent_pool" {
   source = "./modules/scalr/agent-pool"
+  
+  webhook_url = module.api_gateway.url
+  webhook_headers = [
+    {
+      name      = "x-api-key"
+      value     = module.api_gateway.api_key
+      sensitive = true
+    },
+    {
+      name      = "Content-Type"
+      value     = "application/json"
+      sensitive = false
+    }
+  ]
 }
 
 module "ecs" {
@@ -75,7 +94,7 @@ module "ecs" {
   image             = var.ecs_image
   cluster_name      = var.ecs_cluster_name
   task_name         = var.ecs_task_name
-  scalr_url = module.agent_pool.scalr_url
+  scalr_url         = module.agent_pool.scalr_url
   scalr_agent_token = module.agent_pool.agent_token
 
   security_group_name = var.ecs_security_group_name

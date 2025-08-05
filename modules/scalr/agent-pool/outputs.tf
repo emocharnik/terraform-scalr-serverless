@@ -10,9 +10,6 @@ output "agent_token" {
 }
 
 output "scalr_url" {
+  description = "The URL of the Scalr account"
   value = local.scalr_url
-}
-
-output "allowed_ips" {
-  value = local.scalr_ips
 }

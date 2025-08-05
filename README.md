@@ -67,6 +67,51 @@ Scalr.io Webhook → API Gateway → Lambda → ECS Fargate (with EFS cache)
    - Use the API key for authentication
    - Test the webhook functionality
 
+## Future Integration
+
+The architecture supports future bidirectional integration where the agent pool can be configured with the API Gateway details:
+
+1. **Uncomment the webhook configuration** in `main.tf`:
+   ```hcl
+   module "agent_pool" {
+     source = "./modules/scalr/agent-pool"
+     
+     webhook_url = module.api_gateway.url
+     webhook_headers = [
+       {
+         name      = "x-api-key"
+         value     = module.api_gateway.api_key
+         sensitive = true
+       },
+       {
+         name      = "Content-Type"
+         value     = "application/json"
+         sensitive = false
+       }
+     ]
+   }
+   ```
+
+2. **Uncomment the serverless block** in `modules/scalr/agent-pool/main.tf`:
+   ```hcl
+   resource "scalr_agent_pool" "webhook" {
+     name = var.agent_pool_name
+     
+     serverless {
+       api_gateway_url = var.webhook_url
+       
+       dynamic "header" {
+         for_each = var.webhook_headers
+         content {
+           name      = header.value.name
+           value     = header.value.value
+           sensitive = header.value.sensitive
+         }
+       }
+     }
+   }
+   ```
+
 ## Security Configuration
 
 ### IP Restrictions
@@ -118,12 +163,13 @@ Environment variables automatically configured:
 
 ## Outputs
 
-| Output          | Description                    |
-|-----------------|--------------------------------|
-| `webhook_url`   | API Gateway webhook endpoint   |
-| `api_key`       | Authentication key (sensitive) |
-| `agent_pool_id` | Scalr agent pool ID            |
-| `agent_token`   | Scalr agent token (sensitive)  |
+| Output               | Description                        |
+|----------------------|------------------------------------|
+| `webhook_url`        | API Gateway webhook endpoint       |
+| `api_key`            | Authentication key (sensitive)     |
+| `agent_pool_id`      | Scalr agent pool ID                |
+| `agent_token`        | Scalr agent token (sensitive)      |
+| `scalr_allowed_ips`  | Official Scalr.io IP addresses     |
 
 ## Monitoring and Troubleshooting
 
@@ -131,6 +177,9 @@ Environment variables automatically configured:
 ```bash
 # View current IP restrictions
 tofu output scalr_allowed_ips
+
+# Check official Scalr IPs directly
+curl -s https://scalr.io/.well-known/allowlist.txt
 
 # Check API Gateway security
 aws logs filter-log-events --log-group-name API-Gateway-Execution-Logs*

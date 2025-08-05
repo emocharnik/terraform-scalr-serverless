@@ -19,3 +19,8 @@ output "api_key" {
   value       = module.api_gateway.api_key
   sensitive   = true
 }
+
+output "scalr_allowed_ips" {
+  description = "Official Scalr.io IP addresses allowed to access the webhook"
+  value       = module.scalr_ips.allowed_ips
+}
