@@ -38,6 +38,15 @@ module "networking" {
   public_subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24"]
 }
 
+module "efs" {
+  source = "./modules/aws/efs"
+
+  name       = "${var.vpc_name}-cache"
+  vpc_id     = module.networking.vpc_id
+  vpc_cidr   = "10.0.0.0/16"
+  subnet_ids = module.networking.public_subnet_ids
+}
+
 module "lambda" {
   source = "./modules/aws/lambda"
 
@@ -49,7 +58,7 @@ module "lambda" {
   handler             = var.lambda_handler
   memory_size         = var.lambda_memory_size
   runtime             = var.lambda_runtime
-  source_file         = "${path.module}/lamdba_function.py"
+  source_file         = "${path.module}/lambda_function.py"
   timeout             = var.lambda_timeout
 }
 
@@ -70,4 +79,10 @@ module "ecs" {
   scalr_agent_token = module.agent_pool.agent_token
 
   security_group_name = var.ecs_security_group_name
+  task_stop_timeout   = var.ecs_task_stop_timeout
+  
+  # EFS configuration for persistent cache
+  efs_file_system_id                = module.efs.file_system_id
+  terraform_cache_access_point_id   = module.efs.terraform_cache_access_point_id
+  providers_cache_access_point_id   = module.efs.providers_cache_access_point_id
 }

@@ -42,3 +42,27 @@ variable "limit_memory" {
   description = "The hard limit for the memory used by the task"
   default     = 2048
 }
+
+variable "efs_file_system_id" {
+  type        = string
+  description = "EFS file system ID for persistent storage"
+  default     = null
+}
+
+variable "terraform_cache_access_point_id" {
+  type        = string
+  description = "EFS access point ID for Terraform cache"
+  default     = null
+}
+
+variable "providers_cache_access_point_id" {
+  type        = string
+  description = "EFS access point ID for providers cache"
+  default     = null
+}
+
+variable "task_stop_timeout" {
+  type        = number
+  description = "Time to wait for the task to stop gracefully before force-killing (in seconds)"
+  default     = 120
+}

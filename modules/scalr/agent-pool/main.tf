@@ -12,9 +12,8 @@ data "http" "scalr_allowlist" {
   url = "https://scalr.io/.well-known/allowlist.txt"
 }
 
-resource "scalr_agent_pool" "webhook" {
+resource "scalr_agent_pool"  "webhook" {
   name        = var.agent_pool_name
-  account_id  = data.scalr_current_account.this.id
 }
 
 resource "scalr_agent_pool_token" "webhook" {

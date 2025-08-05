@@ -41,19 +41,19 @@ variable "ecs_task_name" {
 variable "ecs_limit_cpu" {
   type        = number
   description = "The hard limit for the cpu unit used by the task"
-  default     = 1024
+  default     = 2048
 }
 
 variable "ecs_limit_memory" {
   type        = number
   description = "The hard limit for the memory used by the task"
-  default     = 2048
+  default     = 4096
 }
 
 variable "ecs_image" {
   type        = string
   description = "ECS container image"
-  default     = "scalr/agent:latest"
+  default     = "scalr/agent-runner:latest"
 }
 
 
@@ -91,4 +91,10 @@ variable "vpc_name" {
   type = string
   description = "VPC Network name"
   default = "scalr-agent"
+}
+
+variable "ecs_task_stop_timeout" {
+  type        = number
+  description = "Time to wait for the ECS task to stop gracefully before force-killing (in seconds)"
+  default     = 120
 }

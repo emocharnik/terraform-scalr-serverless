@@ -3,7 +3,8 @@ data "aws_region" "current" {}
 data "aws_caller_identity" "this" {}
 
 locals {
-  allowed_ips = ["0.0.0.0/0"] # Example IP range, adjust as needed
+  # Use official Scalr IPs when restrictions are enabled, otherwise allow all
+  allowed_ips = var.allow_all_ingress ? ["0.0.0.0/0"] : var.additional_allowed_ips
 }
 
 resource "aws_api_gateway_rest_api" "scalr_webhook" {
@@ -15,11 +16,10 @@ resource "aws_api_gateway_rest_api" "scalr_webhook" {
   }
 }
 
-resource "aws_api_gateway_rest_api" "test" {
-  name = "example-rest-api"
-}
-
-data "aws_iam_policy_document" "test" {
+# Resource policy to restrict access by IP
+data "aws_iam_policy_document" "scalr_api_policy" {
+  count = length(local.allowed_ips) > 0 ? 1 : 0
+  
   statement {
     effect = "Allow"
 
@@ -37,11 +37,31 @@ data "aws_iam_policy_document" "test" {
       values   = local.allowed_ips
     }
   }
+  
+  # Explicit deny for all other IPs (not in the allowed list)
+  statement {
+    effect = "Deny"
+
+    principals {
+      type        = "AWS"
+      identifiers = ["*"]
+    }
+
+    actions   = ["execute-api:Invoke"]
+    resources = ["${aws_api_gateway_rest_api.scalr_webhook.execution_arn}/*"]
+
+    condition {
+      test     = "NotIpAddress"
+      variable = "aws:SourceIp"
+      values   = local.allowed_ips
+    }
+  }
 }
 
-resource "aws_api_gateway_rest_api_policy" "test" {
-  rest_api_id = aws_api_gateway_rest_api.test.id
-  policy      = data.aws_iam_policy_document.test.json
+resource "aws_api_gateway_rest_api_policy" "scalr_ip_restriction" {
+  count       = length(local.allowed_ips) > 0 && !var.allow_all_ingress ? 1 : 0
+  rest_api_id = aws_api_gateway_rest_api.scalr_webhook.id
+  policy      = data.aws_iam_policy_document.scalr_api_policy[0].json
 }
 
 resource "aws_api_gateway_api_key" "scalr_webhook_key" {

@@ -74,7 +74,7 @@ resource "aws_iam_role_policy" "ecs_task_role_policy" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Effect = "Allow"
         Action = [
@@ -83,7 +83,17 @@ resource "aws_iam_role_policy" "ecs_task_role_policy" {
         ]
         Resource = "${aws_cloudwatch_log_group.ecs_logs.arn}:*"
       }
-    ]
+    ], var.efs_file_system_id != null ? [
+      {
+        Effect = "Allow"
+        Action = [
+          "elasticfilesystem:ClientMount",
+          "elasticfilesystem:ClientWrite",
+          "elasticfilesystem:ClientRootAccess"
+        ]
+        Resource = "arn:aws:elasticfilesystem:*:*:file-system/${var.efs_file_system_id}"
+      }
+    ] : [])
   })
 }
 
@@ -101,30 +111,88 @@ resource "aws_ecs_task_definition" "webhook" {
   execution_role_arn = aws_iam_role.ecs_task_execution_role.arn
   task_role_arn      = aws_iam_role.ecs_task_role.arn
 
+  dynamic "volume" {
+    for_each = var.efs_file_system_id != null ? [1] : []
+    content {
+      name = "terraform-cache"
+      
+      efs_volume_configuration {
+        file_system_id     = var.efs_file_system_id
+        root_directory     = "/"
+        transit_encryption = "ENABLED"
+        authorization_config {
+          access_point_id = var.terraform_cache_access_point_id
+        }
+      }
+    }
+  }
+
+  dynamic "volume" {
+    for_each = var.efs_file_system_id != null ? [1] : []
+    content {
+      name = "providers-cache"
+      
+      efs_volume_configuration {
+        file_system_id     = var.efs_file_system_id
+        root_directory     = "/"
+        transit_encryption = "ENABLED"
+        authorization_config {
+          access_point_id = var.providers_cache_access_point_id
+        }
+      }
+    }
+  }
+
   container_definitions = jsonencode([
     {
       name      = var.task_name
       image     = var.image
       essential = true
 
-      environment = [
-    {
-      name  = "SCALR_URL"
-      value = var.scalr_url
-    },
-    {
-      name  = "SCALR_TOKEN"
-      value = var.scalr_agent_token
-    },
-    {
-      name  = "SCALR_SINGLE"
-      value = "true"
-    },
-    {
-      name  = "SCALR_DRIVER"
-      value = "local"
-    }
-  ]
+      environment = concat([
+        {
+          name  = "SCALR_URL"
+          value = var.scalr_url
+        },
+        {
+          name  = "SCALR_TOKEN"
+          value = var.scalr_agent_token
+        },
+        {
+          name  = "SCALR_SINGLE"
+          value = "true"
+        },
+        {
+          name  = "SCALR_DRIVER"
+          value = "local"
+        },
+        {
+          name  = "SCALR_AGENT_TIMEOUT"
+          value = tostring(var.task_stop_timeout - 30)  # Leave buffer for graceful shutdown
+        }
+      ], var.efs_file_system_id != null ? [
+        {
+          name  = "TF_PLUGIN_CACHE_DIR"
+          value = "/terraform-cache"
+        },
+        {
+          name  = "TF_DATA_DIR"
+          value = "/providers-cache"
+        }
+      ] : [])
+
+      mountPoints = var.efs_file_system_id != null ? [
+        {
+          sourceVolume  = "terraform-cache"
+          containerPath = "/terraform-cache"
+          readOnly      = false
+        },
+        {
+          sourceVolume  = "providers-cache"
+          containerPath = "/providers-cache"
+          readOnly      = false
+        }
+      ] : []
 
       logConfiguration = {
         logDriver = "awslogs"
@@ -134,6 +202,8 @@ resource "aws_ecs_task_definition" "webhook" {
           "awslogs-stream-prefix" = "ecs"
         }
       }
+
+      stopTimeout = var.task_stop_timeout
     }
   ])
 }
